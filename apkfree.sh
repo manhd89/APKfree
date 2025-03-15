@@ -37,6 +37,6 @@ download_resources
 
 url="https://androidapksfree.com/youtube/com-google-android-youtube/old/"
 version="${version:-$(get_supported_version "com.google.android.youtube")}"
-url=$(req - $url | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
+url=$(req - $url | grep -B1 'class=\"limit-line\">$version' | grep -oP 'href="\K[^"]+')
 url=$(req - $url | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
-req youtube.apk $url
+req youtube-v$version.apk $url
