@@ -39,6 +39,6 @@ package="com.google.android.youtube"
 
 url="https://androidapksfree.com/youtube/${package//./-}/old/"
 version="${version:-$(get_supported_version "$package")}"
-url=$(req - $url | grep -B1 'class="limit-line">${version}' | grep -oP 'href="\K[^"]+')
+url=$(req - $url | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
 url=$(req - $url | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
 req youtube-v$version.apk $url
