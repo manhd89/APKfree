@@ -36,7 +36,7 @@ download_resources() {
 download_resources
 
 package="com.google.android.youtube"
-version="19.45.38"
+version=19.16.39"
 
 url="https://androidapksfree.com/youtube/${package//./-}/old/"
 version="${version:-$(get_supported_version "$package")}"
