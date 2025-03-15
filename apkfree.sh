@@ -35,7 +35,7 @@ download_resources() {
 
 download_resources
 
-package=$(com.google.android.youtube)
+package="com.google.android.youtube"
 
 url="https://androidapksfree.com/youtube/${package//./-}/old/"
 version="${version:-$(get_supported_version "$package")}"
