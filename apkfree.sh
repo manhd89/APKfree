@@ -81,7 +81,7 @@ fi
 
 apply_patches() {   
     # Remove x86 and x86_64 libs
-    zip --delete "$name-v$version.apk" "lib/x86/*" "lib/x86_64/*" >/dev/null
+    zip --delete "$name-v$version.apk" "lib/x86/*" "lib/x86_64/*" "lib/armeabi-v7a/*" >/dev/null
     
     # Apply patches using Revanced tools
     java -jar revanced-cli*.jar patch \
