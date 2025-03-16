@@ -13,14 +13,14 @@ req() {
 
 # Find max version
 max() {
-	local max=0
-	while read -r v || [ -n "$v" ]; do
-		if [[ ${v//[!0-9]/} -gt ${max//[!0-9]/} ]]; then max=$v; fi
-	done
-	if [[ $max = 0 ]]; then echo ""; else echo "$max"; fi
+    local max=0
+    while read -r v || [ -n "$v" ]; do
+        if [[ ${v//[!0-9]/} -gt ${max//[!0-9]/} ]]; then max=$v; fi
+    done
+    if [[ $max = 0 ]]; then echo ""; else echo "$max"; fi
 }
 
-# Read highest supported versions from Revanced 
+# Read supported versions from Revanced 
 get_supported_versions() {
     package_name=$1
     output=$(java -jar revanced-cli*.jar list-versions -f "$package_name" patch*.rvp)
@@ -43,17 +43,21 @@ download_resources() {
 download_resources
 
 package="com.google.android.youtube"
-
-url="https://androidapksfree.com/youtube/${package//./-}/old/"
+base_url="https://androidapksfree.com/youtube/${package//./-}/old/"
 versions="${versions:-$(get_supported_versions "$package")}"
+
+# Download the page containing all versions
+page_content=$(req - "$base_url")
 
 # Try each version until a valid URL is found
 for version in $versions; do
-    url=$(req - $url | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
+    # Extract the URL for the specific version
+    url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
     if [ -n "$url" ]; then
-        url=$(req - $url | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
-        if [ -n "$url" ]; then
-            req youtube-v$version.apk $url
+        # Extract the download URL from the version-specific page
+        download_url=$(req - "$url" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+        if [ -n "$download_url" ]; then
+            req "youtube-v$version.apk" "$download_url"
             break
         fi
     fi
