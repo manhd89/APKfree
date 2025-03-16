@@ -46,19 +46,27 @@ package="com.google.android.youtube"
 url_base="https://androidapksfree.com/youtube/${package//./-}/old/"
 versions=($(get_supported_versions "$package"))  # Lưu danh sách phiên bản vào mảng
 
+echo "Đang kiểm tra trang APK..."
+page_content=$(req - "$url_base")  # Gọi req chỉ một lần để tải toàn bộ trang
+
 found=false
 
 for version in "${versions[@]}"; do
     echo "Đang thử với phiên bản: $version"
-    
-    url_page=$(req - "$url_base")
-    url=$(echo "$url_page" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
-    
+
+    # Tìm link trang chi tiết của phiên bản này
+    url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
+
     if [ -n "$url" ]; then
-        url=$(req - "$url" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
-        
-        if [ -n "$url" ]; then
-            req "youtube-v$version.apk" "$url"
+        echo "Tìm thấy trang tải xuống, đang lấy nội dung..."
+        download_page=$(req - "$url")  # Chỉ tải nội dung của trang chi tiết này một lần
+
+        # Tìm link tải xuống thực tế
+        download_url=$(echo "$download_page" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+
+        if [ -n "$download_url" ]; then
+            echo "Tải xuống phiên bản: $version"
+            req "youtube-v$version.apk" "$download_url"
             found=true
             break  # Dừng vòng lặp nếu tìm thấy phiên bản hợp lệ
         fi
