@@ -12,21 +12,6 @@ http_request() {
          --keep-session-cookies --timeout=30 -nv -O "$@"
 }
 
-# Function to find the maximum version from a list
-find_max_version() {
-    local max=0
-    while read -r version || [ -n "$version" ]; do
-        if [[ ${version//[!0-9]/} -gt ${max//[!0-9]/} ]]; then
-            max=$version
-        fi
-    done
-    if [[ $max = 0 ]]; then
-        echo ""
-    else
-        echo "$max"
-    fi
-}
-
 # Function to get supported versions from Revanced
 get_supported_versions() {
     local package_name=$1
