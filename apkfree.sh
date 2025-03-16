@@ -1,6 +1,7 @@
 #!/bin/bash
 
-req() {
+# Function to perform HTTP requests
+http_request() {
     wget --header="User-Agent: Mozilla/5.0 (Android 13; Mobile; rv:125.0) Gecko/125.0 Firefox/125.0" \
          --header="Content-Type: application/octet-stream" \
          --header="Accept-Language: en-US,en;q=0.9" \
@@ -11,79 +12,77 @@ req() {
          --keep-session-cookies --timeout=30 -nv -O "$@"
 }
 
-# Find max version
-max() {
-	local max=0
-	while read -r v || [ -n "$v" ]; do
-		if [[ ${v//[!0-9]/} -gt ${max//[!0-9]/} ]]; then max=$v; fi
-	done
-	if [[ $max = 0 ]]; then echo ""; else echo "$max"; fi
+# Function to find the maximum version from a list
+find_max_version() {
+    local max=0
+    while read -r version || [ -n "$version" ]; do
+        if [[ ${version//[!0-9]/} -gt ${max//[!0-9]/} ]]; then
+            max=$version
+        fi
+    done
+    if [[ $max = 0 ]]; then
+        echo ""
+    else
+        echo "$max"
+    fi
 }
 
-# Read highest supported versions from Revanced 
+# Function to get supported versions from Revanced
 get_supported_versions() {
-    package_name=$1
-    output=$(java -jar revanced-cli*.jar list-versions -f "$package_name" patch*.rvp)
-    versions=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | sort -rV)
+    local package_name=$1
+    local output=$(java -jar revanced-cli*.jar list-versions -f "$package_name" patch*.rvp)
+    local versions=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | sort -rV)
     echo "$versions"
 }
 
-# Download necessary resources to patch from Github latest release 
+# Function to download necessary resources from GitHub
 download_resources() {
     for repo in revanced-patches revanced-cli; do
-        githubApiUrl="https://api.github.com/repos/revanced/$repo/releases/latest"
-        page=$(req - 2>/dev/null $githubApiUrl)
-        assetUrls=$(echo $page | jq -r '.assets[] | select(.name | endswith(".asc") | not) | "\(.browser_download_url) \(.name)"')
-        while read -r downloadUrl assetName; do
-            req "$assetName" "$downloadUrl" 
-        done <<< "$assetUrls"
+        local github_api_url="https://api.github.com/repos/revanced/$repo/releases/latest"
+        local page=$(http_request - 2>/dev/null "$github_api_url")
+        local asset_urls=$(echo "$page" | jq -r '.assets[] | select(.name | endswith(".asc") | not) | "\(.browser_download_url) \(.name)"')
+        while read -r download_url asset_name; do
+            http_request "$asset_name" "$download_url"
+        done <<< "$asset_urls"
     done
 }
 
-download_resources
+# Function to download the APK
+download_apk() {
+    local package=$1
+    local url_base="https://androidapksfree.com/youtube/${package//./-}/old/"
+    local versions=($(get_supported_versions "$package"))
+    local page_content=$(http_request - "$url_base")
+    local found=false
 
-package="com.google.android.youtube"
-url_base="https://androidapksfree.com/youtube/${package//./-}/old/"
-versions=($(get_supported_versions "$package"))  # Lưu danh sách phiên bản vào mảng
+    for version in "${versions[@]}"; do
+        echo "Trying version: $version"
+        local url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
 
-echo "Đang kiểm tra trang APK..."
-page_content=$(req - "$url_base")  # Chỉ gọi req một lần để lấy danh sách tất cả phiên bản
+        if [ -n "$url" ]; then
+            echo "Found download page, fetching content..."
+            local download_page=$(http_request - "$url")
+            local download_url=$(echo "$download_page" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
 
-found=false
-
-for v in "${versions[@]}"; do
-    echo "Đang thử với phiên bản: $v"
-
-    # Tìm link trang chi tiết của phiên bản này
-    url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$v" | grep -oP 'href="\K[^"]+')
-
-    if [ -n "$url" ]; then
-        echo "Tìm thấy trang tải xuống, đang lấy nội dung..."
-        download_page=$(req - "$url")  # Chỉ tải nội dung trang chi tiết một lần
-
-        # Tìm link tải xuống thực tế
-        download_url=$(echo "$download_page" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
-
-        if [ -n "$download_url" ]; then
-            version="$v"  # Cập nhật phiên bản thực tế được tải
-            echo "Tải xuống phiên bản: $version"
-            req "youtube-v$version.apk" "$download_url"
-            found=true
-            break  # Dừng vòng lặp nếu tìm thấy phiên bản hợp lệ
+            if [ -n "$download_url" ]; then
+                echo "Downloading version: $version"
+                http_request "youtube-v$version.apk" "$download_url"
+                found=true
+                break
+            fi
         fi
+    done
+
+    if [ "$found" = false ]; then
+        echo "No downloadable version found."
+        exit 1
     fi
-done
+}
 
-if [ "$found" = false ]; then
-    echo "Không tìm thấy phiên bản nào có thể tải xuống."
-    exit 1
-fi
-
-apply_patches() {   
-    # Remove x86 and x86_64 libs
-    zip --delete "$name-v$version.apk" "lib/x86/*" "lib/x86_64/*" "lib/armeabi-v7a/*" >/dev/null
-    
-    # Apply patches using Revanced tools
+# Function to apply patches to the APK
+apply_patches() {
+    local version=$1
+    zip --delete "youtube-v$version.apk" "lib/x86/*" "lib/x86_64/*" "lib/armeabi-v7a/*" >/dev/null
     java -jar revanced-cli*.jar patch \
         --patches patches*.rvp \
         --out "patched-youtube-v$version.apk" \
@@ -91,9 +90,10 @@ apply_patches() {
     rm "youtube-v$version.apk"
 }
 
-sign_patched_apk() {   
-    # Sign the patched APK
-    apksigner=$(find $ANDROID_SDK_ROOT/build-tools -name apksigner -type f | sort -r | head -n 1)
+# Function to sign the patched APK
+sign_apk() {
+    local version=$1
+    local apksigner=$(find $ANDROID_SDK_ROOT/build-tools -name apksigner -type f | sort -r | head -n 1)
     $apksigner sign --verbose \
         --ks ./public.jks \
         --ks-key-alias public \
@@ -101,13 +101,14 @@ sign_patched_apk() {
         --key-pass pass:public \
         --in "patched-youtube-v$version.apk" \
         --out "youtube-revanced-v$version.apk"
-    rm patched-youtube-v$version.apk
-    unset version
+    rm "patched-youtube-v$version.apk"
 }
 
-# Make body Release 
-create_body_release() {
-    body=$(cat <<EOF
+# Function to create release notes
+create_release_notes() {
+    local patchver=$(ls -1 patches*.rvp | grep -oP '\d+(\.\d+)+')
+    local cliver=$(ls -1 revanced-cli*.jar | grep -oP '\d+(\.\d+)+')
+    cat <<EOF
 # Release Notes
 
 ## Build Tools:
@@ -118,57 +119,56 @@ create_body_release() {
 **ReVancedGms** is **necessary** to work. 
 - Please **download** it from [HERE](https://github.com/revanced/gmscore/releases/latest).
 EOF
-)
-
-    releaseData=$(jq -n \
-      --arg tag_name "$tagName" \
-      --arg target_commitish "main" \
-      --arg name "Revanced $tagName" \
-      --arg body "$body" \
-      '{ tag_name: $tag_name, target_commitish: $target_commitish, name: $name, body: $body }')
 }
 
-# Release Revanced APK
+# Function to create a GitHub release
 create_github_release() {
-    authorization="Authorization: token $GITHUB_TOKEN" 
-    apiReleases="https://api.github.com/repos/$GITHUB_REPOSITORY/releases"
-    uploadRelease="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases"
-    apkFilePath=$(find . -type f -name "youtube-revanced*.apk")
-    apkFileName=$(basename "$apkFilePath")
-    patchver=$(ls -1 patches*.rvp | grep -oP '\d+(\.\d+)+')
-    cliver=$(ls -1 revanced-cli*.jar | grep -oP '\d+(\.\d+)+')
-    tagName="v$patchver"
+    local version=$1
+    local authorization="Authorization: token $GITHUB_TOKEN"
+    local api_releases="https://api.github.com/repos/$GITHUB_REPOSITORY/releases"
+    local upload_release="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases"
+    local apk_file_path=$(find . -type f -name "youtube-revanced*.apk")
+    local apk_file_name=$(basename "$apk_file_path")
+    local patchver=$(ls -1 patches*.rvp | grep -oP '\d+(\.\d+)+')
+    local tag_name="v$patchver"
 
-    # Make sure release with APK
-    if [ ! -f "$apkFilePath" ]; then
-        exit
+    if [ ! -f "$apk_file_path" ]; then
+        exit 1
     fi
 
-    existingRelease=$(req - --header="$authorization" "$apiReleases/tags/$tagName" 2>/dev/null)
+    local existing_release=$(http_request - --header="$authorization" "$api_releases/tags/$tag_name" 2>/dev/null)
 
-    # Add more assets release with same tag name
-    if [ -n "$existingRelease" ]; then
-        existingReleaseId=$(echo "$existingRelease" | jq -r ".id")
-        uploadUrlApk="$uploadRelease/$existingReleaseId/assets?name=$apkFileName"
+    if [ -n "$existing_release" ]; then
+        local existing_release_id=$(echo "$existing_release" | jq -r ".id")
+        local upload_url_apk="$upload_release/$existing_release_id/assets?name=$apk_file_name"
 
-        # Delete assest release if same name upload 
-        for existingAsset in $(echo "$existingRelease" | jq -r '.assets[].name'); do
-            [ "$existingAsset" == "$apkFileName" ] && \
-                assetId=$(echo "$existingRelease" | jq -r '.assets[] | select(.name == "'"$apkFileName"'") | .id') && \
-                req - --header="$authorization" --method=DELETE "$apiReleases/assets/$assetId" 2>/dev/null
+        for existing_asset in $(echo "$existing_release" | jq -r '.assets[].name'); do
+            if [ "$existing_asset" == "$apk_file_name" ]; then
+                local asset_id=$(echo "$existing_release" | jq -r '.assets[] | select(.name == "'"$apk_file_name"'") | .id')
+                http_request - --header="$authorization" --method=DELETE "$api_releases/assets/$asset_id" 2>/dev/null
+            fi
         done
     else
-        # Make tag name
-        create_body_release 
-        newRelease=$(req - --header="$authorization" --post-data="$releaseData" "$apiReleases")
-        releaseId=$(echo "$newRelease" | jq -r ".id")
-        uploadUrlApk="$uploadRelease/$releaseId/assets?name=$apkFileName"
+        local release_notes=$(create_release_notes)
+        local release_data=$(jq -n \
+            --arg tag_name "$tag_name" \
+            --arg target_commitish "main" \
+            --arg name "Revanced $tag_name" \
+            --arg body "$release_notes" \
+            '{ tag_name: $tag_name, target_commitish: $target_commitish, name: $name, body: $body }')
+        local new_release=$(http_request - --header="$authorization" --post-data="$release_data" "$api_releases")
+        local release_id=$(echo "$new_release" | jq -r ".id")
+        local upload_url_apk="$upload_release/$release_id/assets?name=$apk_file_name"
     fi
 
-    # Upload file to Release 
-    req - &>/dev/null --header="$authorization" --post-file="$apkFilePath" "$uploadUrlApk"
+    http_request - &>/dev/null --header="$authorization" --post-file="$apk_file_path" "$upload_url_apk"
 }
 
-apply_patches
-sign_patched_apk
-create_github_release
+# Main script execution
+download_resources
+package="com.google.android.youtube"
+download_apk "$package"
+version=$(ls -1 | grep -oP 'youtube-v\K\d+(\.\d+)+' | head -n 1)
+apply_patches "$version"
+sign_apk "$version"
+create_github_release "$version"
