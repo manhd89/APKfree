@@ -29,7 +29,7 @@ get_latest_release_version() {
 
 # Function to compare versions of two repositories
 compare_repository_versions() {    
-    version_patches=$(get_latest_release_version "inotia00/revanced-patches")
+    version_patches=$(get_latest_release_version "revanced/revanced-patches")
     version_current=$(get_latest_release_version "$GITHUB_REPOSITORY")
 
     if [[ -n "$version_patches" && -n "$version_current" ]]; then
