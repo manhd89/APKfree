@@ -24,14 +24,14 @@ max() {
 get_supported_versions() {
     package_name=$1
     output=$(java -jar revanced-cli*.jar list-versions -f "$package_name" patch*.rvp)
-    versions=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | sort -rV)
+    versions=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | sort -V -r)
     echo "$versions"
 }
 
 # Download necessary resources to patch from Github latest release 
 download_resources() {
     for repo in revanced-patches revanced-cli; do
-        githubApiUrl="https://api.github.com/repos/revanced/$repo/releases/latest"
+        githubApiUrl="https://api.github.com/repos/inotia00/$repo/releases/latest"
         page=$(req - 2>/dev/null $githubApiUrl)
         assetUrls=$(echo $page | jq -r '.assets[] | select(.name | endswith(".asc") | not) | "\(.browser_download_url) \(.name)"')
         while read -r downloadUrl assetName; do
@@ -43,40 +43,21 @@ download_resources() {
 download_resources
 
 package="com.google.android.youtube"
-url_base="https://androidapksfree.com/youtube/${package//./-}/old/"
-versions=($(get_supported_versions "$package"))  # Lưu danh sách phiên bản vào mảng
 
-echo "Đang kiểm tra trang APK..."
-page_content=$(req - "$url_base")  # Gọi req chỉ một lần để tải toàn bộ trang
+url="https://androidapksfree.com/youtube/${package//./-}/old/"
+versions="${versions:-$(get_supported_versions "$package")}"
 
-found=false
-
-for version in "${versions[@]}"; do
-    echo "Đang thử với phiên bản: $version"
-
-    # Tìm link trang chi tiết của phiên bản này
-    url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
-
+# Try each version until a valid URL is found
+for version in $versions; do
+    url=$(req - $url | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
     if [ -n "$url" ]; then
-        echo "Tìm thấy trang tải xuống, đang lấy nội dung..."
-        download_page=$(req - "$url")  # Chỉ tải nội dung của trang chi tiết này một lần
-
-        # Tìm link tải xuống thực tế
-        download_url=$(echo "$download_page" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
-
-        if [ -n "$download_url" ]; then
-            echo "Tải xuống phiên bản: $version"
-            req "youtube-v$version.apk" "$download_url"
-            found=true
-            break  # Dừng vòng lặp nếu tìm thấy phiên bản hợp lệ
+        url=$(req - $url | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+        if [ -n "$url" ]; then
+            req youtube-v$version.apk $url
+            break
         fi
     fi
 done
-
-if [ "$found" = false ]; then
-    echo "Không tìm thấy phiên bản nào có thể tải xuống."
-    exit 1
-fi
 
 apply_patches() {   
     # Remove x86 and x86_64 libs
