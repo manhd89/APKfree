@@ -59,7 +59,7 @@ sign_patched_apk() {
     # Sign the patched APK
     apksigner=$(find $ANDROID_SDK_ROOT/build-tools -name apksigner -type f | sort -r | head -n 1)
     $apksigner sign --verbose \
-        --ks ./etc/public.jks \
+        --ks ./public.jks \
         --ks-key-alias public \
         --ks-pass pass:public \
         --key-pass pass:public \
