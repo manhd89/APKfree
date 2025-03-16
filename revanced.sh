@@ -7,7 +7,7 @@ get_latest_release_version() {
     local url="https://api.github.com/repos/${repo}/releases/latest"
 
     # Use req to get the latest release tag name, including the GitHub token in the header
-    response=$(req - --header="Authorization: token $GITHUB_TOKEN" "$url" 2>/dev/null)
+    response=$(req - --header="Authorization: token $GITHUB_TOKEN" "$url")
 
     # Check if the request was successful
     if [[ $? -eq 0 ]]; then
@@ -30,7 +30,9 @@ get_latest_release_version() {
 # Function to compare versions of two repositories
 compare_repository_versions() {    
     version_patches=$(get_latest_release_version "ReVanced/revanced-patches")
+    echo $version_patches
     version_current=$(get_latest_release_version "$GITHUB_REPOSITORY")
+    echo $version_current
 
     if [[ -n "$version_patches" && -n "$version_current" ]]; then
         if [[ "$version_patches" == "$version_current" ]]; then
