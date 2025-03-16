@@ -13,25 +13,25 @@ req() {
 
 # Find max version
 max() {
-    local max=0
-    while read -r v || [ -n "$v" ]; do
-        if [[ ${v//[!0-9]/} -gt ${max//[!0-9]/} ]]; then max=$v; fi
-    done
-    if [[ $max = 0 ]]; then echo ""; else echo "$max"; fi
+	local max=0
+	while read -r v || [ -n "$v" ]; do
+		if [[ ${v//[!0-9]/} -gt ${max//[!0-9]/} ]]; then max=$v; fi
+	done
+	if [[ $max = 0 ]]; then echo ""; else echo "$max"; fi
 }
 
-# Read supported versions from Revanced 
+# Read highest supported versions from Revanced 
 get_supported_versions() {
     package_name=$1
     output=$(java -jar revanced-cli*.jar list-versions -f "$package_name" patch*.rvp)
-    versions=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | sort -V -r)
+    versions=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | sort -rV)
     echo "$versions"
 }
 
 # Download necessary resources to patch from Github latest release 
 download_resources() {
     for repo in revanced-patches revanced-cli; do
-        githubApiUrl="https://api.github.com/repos/revanced/$repo/releases/latest"
+        githubApiUrl="https://api.github.com/repos/inotia00/$repo/releases/latest"
         page=$(req - 2>/dev/null $githubApiUrl)
         assetUrls=$(echo $page | jq -r '.assets[] | select(.name | endswith(".asc") | not) | "\(.browser_download_url) \(.name)"')
         while read -r downloadUrl assetName; do
@@ -43,25 +43,41 @@ download_resources() {
 download_resources
 
 package="com.google.android.youtube"
-base_url="https://androidapksfree.com/youtube/${package//./-}/old/"
-versions="${versions:-$(get_supported_versions "$package")}"
+url_base="https://androidapksfree.com/youtube/${package//./-}/old/"
+versions=($(get_supported_versions "$package"))  # Lưu danh sách phiên bản vào mảng
 
-# Download the page containing all versions
-page_content=$(req - "$base_url")
+echo "Đang kiểm tra trang APK..."
+page_content=$(req - "$url_base")  # Chỉ gọi req một lần để lấy danh sách tất cả phiên bản
 
-# Try each version until a valid URL is found
-for version in $versions; do
-    # Extract the URL for the specific version
-    url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
+found=false
+
+for v in "${versions[@]}"; do
+    echo "Đang thử với phiên bản: $v"
+
+    # Tìm link trang chi tiết của phiên bản này
+    url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$v" | grep -oP 'href="\K[^"]+')
+
     if [ -n "$url" ]; then
-        # Extract the download URL from the version-specific page
-        download_url=$(req - "$url" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+        echo "Tìm thấy trang tải xuống, đang lấy nội dung..."
+        download_page=$(req - "$url")  # Chỉ tải nội dung trang chi tiết một lần
+
+        # Tìm link tải xuống thực tế
+        download_url=$(echo "$download_page" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+
         if [ -n "$download_url" ]; then
+            version="$v"  # Cập nhật phiên bản thực tế được tải
+            echo "Tải xuống phiên bản: $version"
             req "youtube-v$version.apk" "$download_url"
-            break
+            found=true
+            break  # Dừng vòng lặp nếu tìm thấy phiên bản hợp lệ
         fi
     fi
 done
+
+if [ "$found" = false ]; then
+    echo "Không tìm thấy phiên bản nào có thể tải xuống."
+    exit 1
+fi
 
 apply_patches() {   
     # Remove x86 and x86_64 libs
