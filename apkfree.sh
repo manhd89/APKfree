@@ -21,11 +21,11 @@ max() {
 }
 
 # Read highest supported versions from Revanced 
-get_supported_version() {
+get_supported_versions() {
     package_name=$1
     output=$(java -jar revanced-cli*.jar list-versions -f "$package_name" patch*.rvp)
-    version=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | max | xargs)
-    echo "$version"
+    versions=$(echo "$output" | tail -n +3 | sed 's/ (.*)//' | grep -v -w "Any" | sort -rV)
+    echo "$versions"
 }
 
 # Download necessary resources to patch from Github latest release 
@@ -43,12 +43,32 @@ download_resources() {
 download_resources
 
 package="com.google.android.youtube"
+url_base="https://androidapksfree.com/youtube/${package//./-}/old/"
+versions=($(get_supported_versions "$package"))  # Lưu danh sách phiên bản vào mảng
 
-url="https://androidapksfree.com/youtube/${package//./-}/old/"
-version="${version:-$(get_supported_version "$package")}"
-url=$(req - $url | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
-url=$(req - $url | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
-req youtube-v$version.apk $url
+found=false
+
+for version in "${versions[@]}"; do
+    echo "Đang thử với phiên bản: $version"
+    
+    url_page=$(req - "$url_base")
+    url=$(echo "$url_page" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
+    
+    if [ -n "$url" ]; then
+        url=$(req - "$url" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+        
+        if [ -n "$url" ]; then
+            req "youtube-v$version.apk" "$url"
+            found=true
+            break  # Dừng vòng lặp nếu tìm thấy phiên bản hợp lệ
+        fi
+    fi
+done
+
+if [ "$found" = false ]; then
+    echo "Không tìm thấy phiên bản nào có thể tải xuống."
+    exit 1
+fi
 
 apply_patches() {   
     # Remove x86 and x86_64 libs
