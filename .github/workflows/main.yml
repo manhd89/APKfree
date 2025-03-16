@@ -1,13 +1,13 @@
-name: Get APK
+name: Patch Revanced 
 on:
   push:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
-
+    
 jobs:
   build:
-    name: Get APK 
+    name: Patch YouTube 
     permissions: write-all
     runs-on: ubuntu-latest
     env:
@@ -15,10 +15,18 @@ jobs:
       
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4  
+      uses: actions/checkout@main  
 
-    - name: Get apk
+    - name: Patch Revanced
       run: bash revanced.sh
+
+    - name: Delete older releases
+      uses: dev-drprasad/delete-older-releases@v0.3.4
+      with:
+        keep_latest: 1
+        delete_tags: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
              
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
