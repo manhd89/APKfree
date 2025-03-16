@@ -18,7 +18,7 @@ jobs:
       uses: actions/checkout@v4  
 
     - name: Get apk
-      run: bash apkfree.sh
+      run: bash revanced.sh
              
     - name: Delete workflow runs
       uses: Mattraks/delete-workflow-runs@v2
