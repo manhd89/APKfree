@@ -42,3 +42,97 @@ version="${version:-$(get_supported_version "$package")}"
 url=$(req - $url | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
 url=$(req - $url | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
 req youtube-v$version.apk $url
+
+apply_patches() {   
+    # Remove x86 and x86_64 libs
+    zip --delete "$name-v$version.apk" "lib/x86/*" "lib/x86_64/*" >/dev/null
+    
+    # Apply patches using Revanced tools
+    java -jar revanced-cli*.jar patch \
+        --patches patches*.rvp \
+        --out "patched-youtube-v$version.apk" \
+        "youtube-v$version.apk"
+    rm "youtube-v$version.apk"
+}
+
+sign_patched_apk() {   
+    # Sign the patched APK
+    apksigner=$(find $ANDROID_SDK_ROOT/build-tools -name apksigner -type f | sort -r | head -n 1)
+    $apksigner sign --verbose \
+        --ks ./etc/public.jks \
+        --ks-key-alias public \
+        --ks-pass pass:public \
+        --key-pass pass:public \
+        --in "patched-youtube-v$version.apk" \
+        --out "youtube-revanced-v$version.apk"
+    rm patched-youtube-v$version.apk
+    unset version
+}
+
+# Make body Release 
+create_body_release() {
+    body=$(cat <<EOF
+# Release Notes
+
+## Build Tools:
+- **ReVanced Patches:** v$patchver
+- **ReVanced CLI:** v$cliver
+
+## Note:
+**ReVancedGms** is **necessary** to work. 
+- Please **download** it from [HERE](https://github.com/revanced/gmscore/releases/latest).
+EOF
+)
+
+    releaseData=$(jq -n \
+      --arg tag_name "$tagName" \
+      --arg target_commitish "main" \
+      --arg name "Revanced $tagName" \
+      --arg body "$body" \
+      '{ tag_name: $tag_name, target_commitish: $target_commitish, name: $name, body: $body }')
+}
+
+# Release Revanced APK
+create_github_release() {
+    authorization="Authorization: token $GITHUB_TOKEN" 
+    apiReleases="https://api.github.com/repos/$GITHUB_REPOSITORY/releases"
+    uploadRelease="https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases"
+    apkFilePath=$(find . -type f -name "youtube-revanced*.apk")
+    apkFileName=$(basename "$apkFilePath")
+    patchver=$(ls -1 patches*.rvp | grep -oP '\d+(\.\d+)+')
+    cliver=$(ls -1 revanced-cli*.jar | grep -oP '\d+(\.\d+)+')
+    tagName="v$patchver"
+
+    # Make sure release with APK
+    if [ ! -f "$apkFilePath" ]; then
+        exit
+    fi
+
+    existingRelease=$(req - --header="$authorization" "$apiReleases/tags/$tagName" 2>/dev/null)
+
+    # Add more assets release with same tag name
+    if [ -n "$existingRelease" ]; then
+        existingReleaseId=$(echo "$existingRelease" | jq -r ".id")
+        uploadUrlApk="$uploadRelease/$existingReleaseId/assets?name=$apkFileName"
+
+        # Delete assest release if same name upload 
+        for existingAsset in $(echo "$existingRelease" | jq -r '.assets[].name'); do
+            [ "$existingAsset" == "$apkFileName" ] && \
+                assetId=$(echo "$existingRelease" | jq -r '.assets[] | select(.name == "'"$apkFileName"'") | .id') && \
+                req - --header="$authorization" --method=DELETE "$apiReleases/assets/$assetId" 2>/dev/null
+        done
+    else
+        # Make tag name
+        create_body_release 
+        newRelease=$(req - --header="$authorization" --post-data="$releaseData" "$apiReleases")
+        releaseId=$(echo "$newRelease" | jq -r ".id")
+        uploadUrlApk="$uploadRelease/$releaseId/assets?name=$apkFileName"
+    fi
+
+    # Upload file to Release 
+    req - &>/dev/null --header="$authorization" --post-file="$apkFilePath" "$uploadUrlApk"
+}
+
+apply_patches
+sign_patched_apk
+create_github_release
