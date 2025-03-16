@@ -31,7 +31,7 @@ get_supported_versions() {
 # Download necessary resources to patch from Github latest release 
 download_resources() {
     for repo in revanced-patches revanced-cli; do
-        githubApiUrl="https://api.github.com/repos/inotia00/$repo/releases/latest"
+        githubApiUrl="https://api.github.com/repos/revanced/$repo/releases/latest"
         page=$(req - 2>/dev/null $githubApiUrl)
         assetUrls=$(echo $page | jq -r '.assets[] | select(.name | endswith(".asc") | not) | "\(.browser_download_url) \(.name)"')
         while read -r downloadUrl assetName; do
