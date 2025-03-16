@@ -163,12 +163,3 @@ create_github_release() {
 
     http_request - &>/dev/null --header="$authorization" --post-file="$apk_file_path" "$upload_url_apk"
 }
-
-# Main script execution
-download_resources
-package="com.google.android.youtube"
-download_apk "$package"
-version=$(ls -1 | grep -oP 'youtube-v\K\d+(\.\d+)+' | head -n 1)
-apply_patches "$version"
-sign_apk "$version"
-create_github_release "$version"
