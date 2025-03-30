@@ -35,27 +35,44 @@ download_resources() {
 # Function to download the APK
 download_apk() {
     local package=$1
-    local url_base="https://androidapksfree.com/youtube/${package//./-}/old/page/1"
+    local base_url="https://androidapksfree.com/youtube/${package//./-}/old/page"
     local versions=($(get_supported_versions "$package"))
-    local page_content=$(http_request - "$url_base")
     local found=false
 
     for version in "${versions[@]}"; do
-        echo "Trying version: $version"
-        local url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
+        echo "Searching for version: $version"
 
-        if [ -n "$url" ]; then
-            echo "Found download page, fetching content..."
-            local download_page=$(http_request - "$url")
-            local download_url=$(echo "$download_page" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+        local page=1
+        while true; do
+            local url="$base_url/$page"
+            echo "Checking page $page: $url"
 
-            if [ -n "$download_url" ]; then
-                echo "Downloading version: $version"
-                http_request "youtube-v$version.apk" "$download_url"
-                found=true
-                break
+            local page_content=$(http_request - "$url")
+            local available_versions=($(echo "$page_content" | grep -oP '(?<=class="limit-line">)[^<]+'))
+
+            if [ ${#available_versions[@]} -eq 0 ] || [[ "${available_versions[-1]}" < "$version" ]]; then
+                echo "No matching version on page $page. Moving to next page..."
+                ((page++))
+                continue
             fi
-        fi
+
+            local apk_url=$(echo "$page_content" | grep -B1 "class=\"limit-line\">$version" | grep -oP 'href="\K[^"]+')
+
+            if [ -n "$apk_url" ]; then
+                echo "Found download page for version $version, fetching content..."
+                local download_page=$(http_request - "$apk_url")
+                local download_url=$(echo "$download_page" | grep 'class="buttonDownload box-shadow-mod"' | grep -oP 'href="\K[^"]+')
+
+                if [ -n "$download_url" ]; then
+                    echo "Downloading version: $version"
+                    http_request "youtube-v$version.apk" "$download_url"
+                    found=true
+                    break 2
+                fi
+            fi
+
+            ((page++))
+        done
     done
 
     if [ "$found" = false ]; then
