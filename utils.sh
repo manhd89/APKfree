@@ -35,7 +35,7 @@ download_resources() {
 # Function to download the APK
 download_apk() {
     local package=$1
-    local url_base="https://androidapksfree.com/youtube/${package//./-}/old/"
+    local url_base="https://androidapksfree.com/youtube/${package//./-}/old/page/1"
     local versions=($(get_supported_versions "$package"))
     local page_content=$(http_request - "$url_base")
     local found=false
