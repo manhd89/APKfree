@@ -48,8 +48,8 @@ download_apk() {
             echo "Checking page $page: $url"
 
             local page_content=$(http_request - "$url")
-            local available_versions=($(echo "$page_content" | grep -oP '(?<=class="limit-line">)[^<]+'))
-
+            local available_versions=($(echo "$page_content" | grep -oP '(?<=class="limit-line">)\d+\.\d+\.\d+'))
+            
             echo " Versions available in page $page are: ${available_versions[@]}"
 
             if [ ${#available_versions[@]} -eq 0 ] || [[ "${available_versions[-1]}" < "$version" ]]; then
